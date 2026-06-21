@@ -1,0 +1,87 @@
+#!/bin/bash
+
+# ============================================
+# Rofi Wallpaper Changer - With GIF Support
+# ============================================
+
+WALLPAPER_DIR="$HOME/Images/Wallpapers"
+TRANSITION_TYPE="wipe"
+TRANSITION_DURATION="1.5"
+THUMB_SIZE="100x100"
+CACHE_DIR="$HOME/.cache/rofi-wallpaper-thumbs"
+
+mkdir -p "$CACHE_DIR"
+
+# Function to create icon file for Rofi (handles GIFs)
+create_icon() {
+    local img="$1"
+    local hash=$(echo -n "$img" | md5sum | cut -d' ' -f1)
+    local icon_path="$CACHE_DIR/${hash}.png"
+
+    if [ ! -f "$icon_path" ]; then
+        # For GIFs, use the first frame for thumbnail
+        if [[ "$img" =~ \.gif$ ]]; then
+            convert "$img[0]" -resize "${THUMB_SIZE}^" -gravity center -extent "${THINB_SIZE}" "$icon_path" 2>/dev/null
+        else
+            convert "$img" -resize "${THUMB_SIZE}^" -gravity center -extent "${THUMB_SIZE}" "$icon_path" 2>/dev/null
+        fi
+    fi
+
+    echo "$icon_path"
+}
+
+# Get wallpapers (now includes .gif)
+wallpapers=()
+while IFS= read -r file; do
+    wallpapers+=("$file")
+done < <(find "$WALLPAPER_DIR" -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.gif" \) 2>/dev/null | sort)
+
+if [ ${#wallpapers[@]} -eq 0 ]; then
+    echo "No wallpapers found"
+    exit 1
+fi
+
+# Build menu with icons
+menu_items=""
+for wp in "${wallpapers[@]}"; do
+    name=$(basename "$wp" | sed 's/\.[^.]*$//')
+    icon=$(create_icon "$wp")
+    # Add GIF indicator for animated wallpapers
+    if [[ "$wp" =~ \.gif$ ]]; then
+        name="$name [GIF]"
+    fi
+    menu_items+="$name\x00icon\x1f$icon\n"
+done
+
+# Show Rofi with icons - no text prompt at all
+selected=$(echo -e "$menu_items" | rofi -dmenu \
+    -i \
+    -show-icons \
+    -theme ~/.config/rofi/launchers/type-2/style-1.rasi \
+    -p "")
+
+# Remove the [GIF] suffix if present
+selected_name="${selected// \[GIF\]/}"
+
+# Apply wallpaper
+if [ -n "$selected" ]; then
+    for wp in "${wallpapers[@]}"; do
+        name=$(basename "$wp" | sed 's/\.[^.]*$//')
+        if [ "$name" = "$selected_name" ]; then
+            # Ensure swww-daemon is running
+            if ! pgrep -x "swww-daemon" > /dev/null; then
+                swwww-daemon &
+                sleep 0.5
+            fi
+
+            # Set wallpaper - swww handles GIFs natively
+            swww img "$wp" \
+                --transition-type "$TRANSITION_TYPE" \
+                --transition-duration "$TRANSITION_DURATION" \
+                --resize crop
+
+            notify-send "Wallpaper" "Changed to: $name" -t 1000
+            break
+        fi
+    done
+fi
