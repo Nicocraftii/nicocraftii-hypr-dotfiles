@@ -1,0 +1,8 @@
+@define-color foreground #24362B;
+@define-color background #D5F5E1;
+
+/* Optional: Define accent colors for module states (e.g., volume, battery, workspaces) */
+
+@define-color primary #A2E077;
+@define-color accent_glow #F7E1C7;
+@define-color utility_blue #5298C4;
